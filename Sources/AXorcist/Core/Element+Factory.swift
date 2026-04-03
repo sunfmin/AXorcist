@@ -32,13 +32,30 @@ extension Element {
 
     @MainActor
     public static func focusedApplication() -> Element? {
-        guard let focusedApp = NSWorkspace.shared.frontmostApplication else {
-            GlobalAXLogger.shared.log(AXLogEntry(
-                level: .warning,
-                message: "No frontmost application could be determined."))
-            return nil
+        // Use the AX system-wide element to find the focused application.
+        // This works inside sandboxed environments (e.g. xctrunner) where
+        // NSWorkspace.shared.frontmostApplication is unavailable.
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedAppRef: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(
+            systemWide,
+            "AXFocusedApplication" as CFString,
+            &focusedAppRef
+        )
+        if error == .success, let appRef = focusedAppRef {
+            // swiftlint:disable:next force_cast
+            return Element(appRef as! AXUIElement)
         }
-        return self.application(for: focusedApp)
+
+        // Fallback to NSWorkspace
+        if let focusedApp = NSWorkspace.shared.frontmostApplication {
+            return self.application(for: focusedApp)
+        }
+
+        GlobalAXLogger.shared.log(AXLogEntry(
+            level: .warning,
+            message: "No frontmost application could be determined via AX or NSWorkspace."))
+        return nil
     }
 
     /// Gets the element at the specified position (system-wide)
