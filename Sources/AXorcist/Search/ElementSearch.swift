@@ -283,6 +283,19 @@ public enum TreeVisitorResult {
     case stop
 }
 
+/// Visited-element tracking for cycle detection during tree traversal.
+/// The set is cleared at the start of each top-level traversal to prevent
+/// stale CFHash values (from freed AXUIElements) from persisting across calls
+/// — which previously caused malloc crashes on apps with dynamic element trees
+/// (e.g. Safari web content).
+private enum TraversalVisitedSet {
+    nonisolated(unsafe) static var set = Set<UInt>()
+
+    static func reset() {
+        set.removeAll(keepingCapacity: true)
+    }
+}
+
 @MainActor
 public func traverseAndSearch(
     element: Element,
@@ -290,6 +303,11 @@ public func traverseAndSearch(
     currentDepth: Int,
     maxDepth: Int)
 {
+    // Clear the visited set at the start of each top-level traversal.
+    if currentDepth == 0 {
+        TraversalVisitedSet.reset()
+    }
+
     let elementDescription = element.briefDescription(option: ValueFormatOption.smart)
 
     guard currentDepth <= maxDepth else {
@@ -316,11 +334,10 @@ public func traverseAndSearch(
         // Continue to process children
     }
 
-    // Maintain a static visited set per traversal to avoid cycles.
-    // We store the CFHash of AXUIElement to uniquely identify.
-    enum VisitedSet { nonisolated(unsafe) static var set = Set<UInt>() }
-
-    if let children = element.children(strict: false), !children.isEmpty,
+    // Use strict: true to only fetch kAXChildrenAttribute.
+    // The non-strict path fetches 14+ alternative attributes per element which
+    // overwhelms Safari's web process and triggers malloc corruption.
+    if let children = element.children(strict: true), !children.isEmpty,
        axorcScanAll || (element.role().map { containerRoles.contains($0) } ?? false)
     {
         // Abort if we are past the deadline
@@ -331,7 +348,7 @@ public func traverseAndSearch(
 
         for child in children {
             let hashVal: UInt = CFHash(child.underlyingElement)
-            if !VisitedSet.set.insert(hashVal).inserted {
+            if !TraversalVisitedSet.set.insert(hashVal).inserted {
                 continue // already visited; skip to avoid cycles
             }
             traverseAndSearch(element: child, visitor: visitor, currentDepth: currentDepth + 1, maxDepth: maxDepth)

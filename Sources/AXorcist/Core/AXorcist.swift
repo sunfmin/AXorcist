@@ -221,15 +221,27 @@ public class AXorcist {
             guard elementMatchesCriteria(element, criteria: criteria) else { return }
         }
 
-        // Build element data
-        let elementData = buildQueryResponse(
-            element: element,
-            attributesToFetch: context.attributesToFetch,
-            includeChildrenBrief: false)
+        // Build element data — use lightweight attribute fetch only.
+        // Avoid extractTextFromElement / generatePathString which do their own
+        // deep traversal and hammer the AX server on large apps like Safari.
+        let fetchedAttributes = fetchLightweightAttributes(element: element, attributeNames: context.attributesToFetch)
+        let briefDescription = element.briefDescription(option: ValueFormatOption.smart)
+        let role = element.role()
+
+        let elementData = AXElementData(
+            briefDescription: briefDescription,
+            role: role,
+            attributes: fetchedAttributes,
+            allPossibleAttributes: nil,
+            textualContent: nil,
+            childrenBriefDescriptions: nil,
+            fullAXDescription: nil,
+            path: nil)
         collectedElements.append(elementData)
 
-        // Recursively collect children
-        if let children = element.children() {
+        // Use strict: true — only fetch kAXChildrenAttribute, skip the 14+
+        // alternative attributes that overwhelm Safari's web process.
+        if let children = element.children(strict: true) {
             for child in children {
                 self.collectElementsRecursively(
                     element: child,
@@ -239,6 +251,17 @@ public class AXorcist {
                     collectedElements: &collectedElements)
             }
         }
+    }
+
+    /// Fetches attributes without triggering deep traversal or text extraction.
+    private func fetchLightweightAttributes(element: Element, attributeNames: [String]) -> [String: AXValueWrapper] {
+        var dict: [String: AXValueWrapper] = [:]
+        for name in attributeNames {
+            if let value: Any = element.attribute(Attribute<Any>(name)) {
+                dict[name] = AXValueWrapper(value: value)
+            }
+        }
+        return dict
     }
 
     private struct ElementCollectionContext {
