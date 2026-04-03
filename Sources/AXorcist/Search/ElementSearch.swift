@@ -308,10 +308,7 @@ public func traverseAndSearch(
         TraversalVisitedSet.reset()
     }
 
-    let elementDescription = element.briefDescription(option: ValueFormatOption.smart)
-
     guard currentDepth <= maxDepth else {
-        logTraversalDepthExceeded(maxDepth, elementDescription)
         return
     }
 
@@ -320,18 +317,11 @@ public func traverseAndSearch(
 
     switch visitResult {
     case .stop:
-        logTraversalEvent("STOP", elementDescription: elementDescription, depth: currentDepth)
         return
     case .skipChildren:
-        logTraversalEvent("SKIP_CHILDREN", elementDescription: elementDescription, depth: currentDepth)
-        return // Do not process children
+        return
     case .continue:
-        logTraversalEvent(
-            "CONTINUE",
-            elementDescription: elementDescription,
-            depth: currentDepth,
-            extra: "Processing children")
-        // Continue to process children
+        break
     }
 
     // Use strict: true to only fetch kAXChildrenAttribute.
@@ -428,42 +418,27 @@ public class SearchVisitor: ElementVisitor {
 
     @MainActor
     public func visit(element: Element, depth: Int) -> TreeVisitorResult {
-        let elementDesc = element.briefDescription(option: ValueFormatOption.smart)
         self.currentMaxDepthReachedByVisitor = max(self.currentMaxDepthReachedByVisitor, depth)
 
         if depth > self.maxDepth {
-            logger.debug(
-                logSegments(
-                    "SearchVisitor: Max depth \(self.maxDepth) reached internally at [\(elementDesc)]",
-                    "Skipping"))
             return .skipChildren
         }
 
-        logger.debug("SV: [\(elementDesc)] @\(depth) C:\(self.criteria.count)")
-
-        var matches = false
+        let matches: Bool
         if self.matchAllCriteriaBool {
-            // Use the stored matchType
-            if elementMatchesAllCriteria(element: element, criteria: self.criteria, matchType: self.matchType) {
-                matches = true
-            }
+            matches = elementMatchesAllCriteria(element: element, criteria: self.criteria, matchType: self.matchType)
         } else {
-            // Use the stored matchType
-            if elementMatchesAnyCriterion(element: element, criteria: self.criteria, matchType: self.matchType) {
-                matches = true
-            }
+            matches = elementMatchesAnyCriterion(element: element, criteria: self.criteria, matchType: self.matchType)
         }
 
         if matches {
-            logger.debug("SV: ✓ [\(elementDesc)] @\(depth)")
+            // Only call briefDescription on the matched element, not every element visited.
+            logger.debug("SV: ✓ [\(element.briefDescription(option: ValueFormatOption.smart))] @\(depth)")
             self.foundElement = element
             self.allFoundElements.append(element)
             if self.stopAtFirstMatchInternal {
-                logger.debug("SV: Stop (first match)")
                 return .stop
             }
-        } else {
-            logger.debug("SV: ✗ [\(elementDesc)] @\(depth)")
         }
         return .continue
     }
@@ -496,24 +471,15 @@ public class CollectAllVisitor: ElementVisitor {
     }
 
     public func visit(element: Element, depth: Int) -> TreeVisitorResult {
-        let elementDesc = element.briefDescription(option: ValueFormatOption.smart)
-        logger.debug("CAV: [\(elementDesc)] @\(depth)")
-
         if !self.includeIgnored, element.isIgnored() {
-            logger.debug("CAV: Skip ignored [\(elementDesc)]")
-            return .skipChildren // Skip ignored elements and their children if not including ignored
+            return .skipChildren
         }
 
         if let criteria {
             if elementMatchesAllCriteria(element: element, criteria: criteria) {
-                logger.debug("CAV: + [\(elementDesc)] (match)")
                 self.collectedElements.append(element)
-            } else {
-                logger.debug("CollectAllVisitor: [\(elementDesc)] did NOT match criteria.")
             }
         } else {
-            // No criteria, collect all (respecting includeIgnored)
-            logger.debug("CollectAllVisitor: Adding [\(elementDesc)] (no criteria given).")
             self.collectedElements.append(element)
         }
         return .continue
