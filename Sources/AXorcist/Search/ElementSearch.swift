@@ -324,12 +324,25 @@ public func traverseAndSearch(
         break
     }
 
-    // Use strict children to minimise AX IPC calls. For the top level (depth 0)
-    // we fall back to non-strict so that application windows are discovered via
-    // kAXWindowsAttribute (Safari and Electron don't always expose them through
-    // kAXChildrenAttribute alone).
-    let useStrict = currentDepth > 0
-    if let children = element.children(strict: useStrict), !children.isEmpty {
+    // Always use strict: true to minimise AX IPC. The non-strict path triggers
+    // collectAlternativeChildren which makes 14+ attribute fetches per element,
+    // crashing Safari's web process IPC. For the application root we explicitly
+    // fetch windows below so they are not missed.
+    var children = element.children(strict: true) ?? []
+
+    // At the app root, kAXChildrenAttribute often misses windows.
+    // Explicitly fetch kAXWindowsAttribute which is cheap and reliable.
+    if currentDepth == 0,
+       let windowsUI: [AXUIElement] = element.attribute(Attribute(AXAttributeNames.kAXWindowsAttribute))
+    {
+        let windowElements = windowsUI.map { Element($0) }
+        let existingHashes = Set(children.map { CFHash($0.underlyingElement) })
+        for w in windowElements where !existingHashes.contains(CFHash(w.underlyingElement)) {
+            children.append(w)
+        }
+    }
+
+    if !children.isEmpty {
         // Abort if we are past the deadline
         if let deadline = traversalDeadline, Date() > deadline {
             logger.warning("Traverse: global search timeout (\(axorcTraversalTimeout)s) reached. Aborting traversal.")
