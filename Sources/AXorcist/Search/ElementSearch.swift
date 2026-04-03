@@ -324,10 +324,12 @@ public func traverseAndSearch(
         break
     }
 
-    // We no longer check containerRoles here — calling element.role() on every
-    // node during traversal caused IPC to stale web elements in Safari, leading
-    // to malloc crashes. The depth limit is sufficient to bound traversal.
-    if let children = element.children(strict: false), !children.isEmpty {
+    // Use strict children to minimise AX IPC calls. For the top level (depth 0)
+    // we fall back to non-strict so that application windows are discovered via
+    // kAXWindowsAttribute (Safari and Electron don't always expose them through
+    // kAXChildrenAttribute alone).
+    let useStrict = currentDepth > 0
+    if let children = element.children(strict: useStrict), !children.isEmpty {
         // Abort if we are past the deadline
         if let deadline = traversalDeadline, Date() > deadline {
             logger.warning("Traverse: global search timeout (\(axorcTraversalTimeout)s) reached. Aborting traversal.")
