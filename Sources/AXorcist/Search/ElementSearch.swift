@@ -327,9 +327,11 @@ public func traverseAndSearch(
     // Use strict: true to only fetch kAXChildrenAttribute.
     // The non-strict path fetches 14+ alternative attributes per element which
     // overwhelms Safari's web process and triggers malloc corruption.
-    if let children = element.children(strict: true), !children.isEmpty,
-       axorcScanAll || (element.role().map { containerRoles.contains($0) } ?? false)
-    {
+    //
+    // We no longer check containerRoles here — calling element.role() on every
+    // node during traversal causes IPC to stale web elements in Safari, leading
+    // to malloc crashes. The depth limit is sufficient to bound traversal.
+    if let children = element.children(strict: true), !children.isEmpty {
         // Abort if we are past the deadline
         if let deadline = traversalDeadline, Date() > deadline {
             logger.warning("Traverse: global search timeout (\(axorcTraversalTimeout)s) reached. Aborting traversal.")
