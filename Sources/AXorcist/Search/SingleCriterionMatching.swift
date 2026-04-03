@@ -10,33 +10,14 @@ func matchSingleCriterion(
     key: String,
     expectedValue: String,
     matchType: JSONPathHintComponent.MatchType,
-    elementDescriptionForLog: String) -> Bool
+    elementDescriptionForLog: String?) -> Bool
 {
-    GlobalAXLogger.shared.log(
-        AXLogEntry(
-            level: .debug,
-            message: logSegments(
-                "SC/MSC: Matching key '\(key)' (expected: '\(expectedValue)', ",
-                "type: \(matchType.rawValue)) on ",
-                elementDescriptionForLog)))
-
     let comparisonResult = matchAttributeByKey(
         element: element,
         key: key,
         expectedValue: expectedValue,
         matchType: matchType,
-        elementDescriptionForLog: elementDescriptionForLog)
-
-    GlobalAXLogger.shared.log(
-        AXLogEntry(
-            level: .debug,
-            message: logSegments(
-                [
-                    "SC/MSC: Key '\(key)'",
-                    "Expected='\(expectedValue)'",
-                    "MatchType='\(matchType.rawValue)'",
-                    "Result=\(comparisonResult) on \(elementDescriptionForLog).",
-                ])))
+        elementDescriptionForLog: elementDescriptionForLog ?? "")
     return comparisonResult
 }
 

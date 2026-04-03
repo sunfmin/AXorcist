@@ -12,20 +12,18 @@ public func elementMatchesAllCriteria(
 {
     for criterion in criteria {
         let effectiveMatchType = criterion.matchType ?? matchType
+        // Pass nil for elementDescriptionForLog to avoid expensive briefDescription
+        // calls on every element during large tree traversals (e.g. Safari web DOM).
         if !matchSingleCriterion(
             element: element,
             key: criterion.attribute,
             expectedValue: criterion.value,
             matchType: effectiveMatchType,
-            elementDescriptionForLog: element.briefDescription(option: ValueFormatOption.raw))
+            elementDescriptionForLog: nil)
         {
             return false
         }
     }
-    GlobalAXLogger.shared.log(AXLogEntry(
-        level: .debug,
-        message: "elementMatchesAllCriteria: Element '\(element.briefDescription(option: ValueFormatOption.raw))' " +
-            "MATCHED ALL \(criteria.count) criteria: \(criteria)."))
     return true
 }
 
@@ -35,38 +33,21 @@ public func elementMatchesAnyCriterion(
     criteria: [Criterion],
     matchType: JSONPathHintComponent.MatchType = .exact) -> Bool
 {
-    // If there are no criteria, it's vacuously false that any criterion matches.
     if criteria.isEmpty {
-        GlobalAXLogger.shared.log(AXLogEntry(
-            level: .debug,
-            message: "elementMatchesAnyCriterion: No criteria provided. Returning false."))
         return false
     }
     for criterion in criteria {
-        // Use criterion's own match_type if present, else the overall one.
         let effectiveMatchType = criterion.matchType ?? matchType
         if matchSingleCriterion(
             element: element,
             key: criterion.attribute,
             expectedValue: criterion.value,
             matchType: effectiveMatchType,
-            elementDescriptionForLog: element.briefDescription(option: ValueFormatOption.raw))
+            elementDescriptionForLog: nil)
         {
-            let description = element.briefDescription(option: .raw)
-            GlobalAXLogger.shared.log(AXLogEntry(
-                level: .debug,
-                message: "elementMatchesAnyCriterion: Element '\(description)' MATCHED criterion: \(criterion)."))
-            // Found one criterion that matches
             return true
         }
     }
-    let description = element.briefDescription(option: .raw)
-    GlobalAXLogger.shared.log(AXLogEntry(
-        level: .debug,
-        message: [
-            "elementMatchesAnyCriterion: Element '\(description)' DID NOT MATCH ANY",
-            "of \(criteria.count) criteria: \(criteria).",
-        ].joined(separator: " ")))
     return false
 }
 
